@@ -23,6 +23,8 @@ const Status createHeapFile(const string fileName)
             return status;
         }
 
+    status = db.closeFile(file);
+
         // open newly created file
 		status = db.openFile(fileName, file);
         if (status != OK) {
@@ -68,6 +70,7 @@ const Status createHeapFile(const string fileName)
             return status;
         }
     }
+    status = db.closeFile(file);
     return (FILEEXISTS);
 }
 
@@ -181,30 +184,65 @@ const Status HeapFile::getRecord(const RID & rid, Record & rec)
     // !! HINT: retrieve arbitraray record given the RID of the record !!
 
     // curPage & curPageNo are used to keep track of curr data page pinned in buffer pool
-    // check currPage is NULL
-    if (curPage == NULL) {
-        // if yes, read the page (with the requested record on it) into the buffer
-        // aka bookkeep: set the curPage, curPageNo, curDirtyFlad, & curRec properly
-    }
-
-    // if desired record is on the curr pinned page, curPage->getRecord
-    status = curPage->getRecord(rid, rec);
-    if (status != OK) {
-        // else, unpin curr pinned page
-        // use pageNo field of RID to read page into buf pool
-        status = bufMgr->unPinPage(filePtr, curPageNo, true);
+    // if the current page is not null or isn't the requested one
+    if (curPage == NULL || curPageNo != rid.pageNo) {
+      if (curPage != NULL) {
+        // unpin the currently pinned page
+        status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
         if (status != OK) {
-            return status;
+          return status;
         }
+      }
+         // if yes, read the page (with the requested record on it) into the buffer
+         // aka bookkeep: set the curPage, curPageNo, curDirtyFlad, & curRec properly
+
+
+        // read page containing  desired record into buffer pool
         status = bufMgr->readPage(filePtr, rid.pageNo, curPage);
-        if (status != OK) {
+        if (status != OK)
+        {
             return status;
         }
+
+        // bookkeeping
+        curPageNo = rid.pageNo;
+        curDirtyFlag = false;
+        curRec = NULLRID; // No specific record set yet
     }
 
-    // return pointer to record via rec
-    // ???????
-}
+    // get record from currently pinned page
+    status = curPage->getRecord(rid, rec);
+    if (status != OK)
+    {
+        return status;
+    }
+
+    // put the rid as curRec so we know which one we have
+    curRec = rid;
+
+    return OK;
+  }
+  
+  //     // if desired record is on the curr pinned page, curPage->getRecord
+  //     status = curPage->getRecord(rid, rec);
+  //     if (status != OK) {
+  //         // else, unpin curr pinned page
+  //         // use pageNo field of RID to read page into buf pool
+  //         status = bufMgr->unPinPage(filePtr, curPageNo, true);
+  //         if (status != OK) {
+  //             return status;
+  //         }
+  //         status = bufMgr->readPage(filePtr, rid.pageNo, curPage);
+  //         if (status != OK) {
+  //             return status;
+  //         }
+  //     }
+
+  //     // return pointer to record via rec
+  //     curRec = rid;
+
+  //     return OK;
+  // }
 
 HeapFileScan::HeapFileScan(const string & name,
 			   Status & status) : HeapFile(name, status)
