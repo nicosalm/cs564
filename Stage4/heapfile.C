@@ -35,7 +35,7 @@ const Status createHeapFile(const string fileName)
         }
 
         // cast Page* to FileHdrPage*
-        hdrPage = (FileHdrPage*)&newPage;
+        hdrPage = (FileHdrPage *)&newPage;
 
         // use hdrPage to initialize values in the header page
         // ???????
@@ -46,10 +46,11 @@ const Status createHeapFile(const string fileName)
             return status;
         }
 
-        // init() page contents using Page*
+        // init page contents using Page*
         newPage->init(newPageNo);
 
         // store newPageNo in firstPage and lastPage of the FileHdrPage
+        // ???
         hdrPage->firstPage = newPageNo;
         hdrPage->lastPage = newPageNo;
         
@@ -84,15 +85,34 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
     // open the file and read in the header page and the first data page
     if ((status = db.openFile(fileName, filePtr)) == OK)
     {
-        // read and pin the header page for the file in bufPool
-        status = bufMgr->readPage(filePtr, );
-        // init headerPage, headerPageNo & hdrDirtyFlag
+        
         // get page number by file->getFirstPage() (see I/O layer)
-        // ??
+        status = filePtr->getFirstPage(headerPageNo);
+        if (status != OK) {
+            returnStatus = status;
+            return;
+        }
 
+        // read and pin the header page for the file in bufPool
+        status = bufMgr->readPage(filePtr, headerPageNo, pagePtr);
+        if (status != OK) {
+            returnStatus = status;
+            return;
+        }
+
+        // init headerPage & hdrDirtyFlag
+        headerPage = (FileHdrPage *)&pagePtr;
+        hdrDirtyFlag = false;
 
         // read and pin first page of file into buf pool
-        // init curPage, curPageNo, & curDirtyFlag
+        curPageNo = headerPage->firstPage;
+        status = bufMgr->readPage(filePtr, curPageNo, curPage);
+        if (status != OK) {
+            returnStatus = status;
+            return;
+        }
+        // init curDirtyFlag
+        curDirtyFlag = false;
     
         // set curRec to NULLRID
         curRec = NULLRID;
