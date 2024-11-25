@@ -52,9 +52,17 @@ const Status createHeapFile(const string fileName)
         // store newPageNo in firstPage and lastPage of the FileHdrPage
         hdrPage->firstPage = newPageNo;
         hdrPage->lastPage = newPageNo;
+        
 
 		// unpin both pages and mark them as dirty
-        // ????????
+        status = bufMgr->unPinPage(file, hdrPageNo, true);
+        if (status != OK) {
+            return status;
+        }
+        status = bufMgr->unPinPage(file, newPageNo, true);
+        if (status != OK) {
+            return status;
+        }
     }
     return (FILEEXISTS);
 }
@@ -77,12 +85,17 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
     if ((status = db.openFile(fileName, filePtr)) == OK)
     {
         // read and pin the header page for the file in bufPool
+        status = bufMgr->readPage(filePtr, );
         // init headerPage, headerPageNo & hdrDirtyFlag
         // get page number by file->getFirstPage() (see I/O layer)
+        // ??
+
 
         // read and pin first page of file into buf pool
         // init curPage, curPageNo, & curDirtyFlag
+    
         // set curRec to NULLRID
+        curRec = NULLRID;
     }
     else
     {
