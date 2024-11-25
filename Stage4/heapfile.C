@@ -179,15 +179,28 @@ const Status HeapFile::getRecord(const RID & rid, Record & rec)
 
     // curPage & curPageNo are used to keep track of curr data page pinned in buffer pool
     // check currPage is NULL
-    // if yes, read the page (with the requested record on it) into the buffer
-    // aka bookkeep: set the curPage, curPageNo, curDirtyFlad, & curRec properly
+    if (curPage == NULL) {
+        // if yes, read the page (with the requested record on it) into the buffer
+        // aka bookkeep: set the curPage, curPageNo, curDirtyFlad, & curRec properly
+    }
 
     // if desired record is on the curr pinned page, curPage->getRecord
-
-    // else, unpin curr pinned page
-    // use pageNo field of RID to read page into buf pool
+    status = curPage->getRecord(rid, rec);
+    if (status != OK) {
+        // else, unpin curr pinned page
+        // use pageNo field of RID to read page into buf pool
+        status = bufMgr->unPinPage(filePtr, curPageNo, true);
+        if (status != OK) {
+            return status;
+        }
+        status = bufMgr->readPage(filePtr, rid.pageNo, curPage);
+        if (status != OK) {
+            return status;
+        }
+    }
 
     // return pointer to record via rec
+    // ???????
 }
 
 HeapFileScan::HeapFileScan(const string & name,
@@ -427,19 +440,34 @@ const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid)
     }
 
     // check if curPage is NULL
-    // if yes, make last page now the cur page and read into the buffer
-    // call curPage->insertRecord
-    // if successful, bookkeep: update the recCnt, hdrDirtyFlad, curDirtyFlag, etc properly
+    if (curPage == NULL) {
+        // if yes, make last page now the cur page and read into the buffer
+        curPageNo = headerPage->lastPage;
+        status = bufMgr->allocPage(filePtr, curPageNo, curPage);
+        if (status != OK) {
+            return status;
+        }
+    }
 
-    // if fails, create a new page
-    //      init properly
-    //      modify header page
-    //      link up new page
-    //      make cur page to be newly allocated page
-    //      try to insert record
-    //      bookkeeping!
+    // call curPage->insertRecord
+    status = curPage->insertRecord(rec, outRid);
+    if (status != OK) {
+        newPageNo = outRid.pageNo;
+        status = bufMgr->allocPage(filePtr, newPageNo, newPage);
+        // if fails, create a new page
+        //      init properly
+        //      modify header page
+        //      link up new page
+        //      make cur page to be newly allocated page
+        //      try to insert record
+        //      bookkeeping!
+    }
+    else {
+        // if successful, bookkeep: update the recCnt, hdrDirtyFlad, curDirtyFlag, etc properly
+    }
 
     // return the RID of the inserted outRid record
+    
 }
 
 
