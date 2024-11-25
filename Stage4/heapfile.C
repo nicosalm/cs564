@@ -17,19 +17,35 @@ const Status createHeapFile(const string fileName)
     {
 		// file doesn't exist. First create it and allocate
 		// an empty header page and data page.
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
+        status = db.createFile(fileName);
+        if (status != OK) {
+            return status;
+        }
+
+        // open newly created file
+		status = db.openFile(fileName, file);
+        if (status != OK) {
+            return status;
+        }
+
+        // allocate newly created and opened file
+        status = bufMgr->allocPage(file, hdrPageNo, newPage);
+        if (status != OK) {
+            return status;
+        }
+
+        // cast Page* to FileHdrPage*
+        // I think this would include newPageNo to hdrPageNo as well
+
+        // use hdrPage to initialize values in the header page
+
+        // second allocPage() call -> this will be first data page in file, this will go into the Page*
+
+        // init() page contents using Page*
+
+        // store newPageNo in firstPage and lastPage of the FileHdrPage
+
+		// unpin both pages and mark them as dirty
     }
     return (FILEEXISTS);
 }
@@ -51,17 +67,13 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
     // open the file and read in the header page and the first data page
     if ((status = db.openFile(fileName, filePtr)) == OK)
     {
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
-		
+        // read and pin the header page for the file in bufPool
+        // init headerPage, headerPageNo & hdrDirtyFlag
+        // get page number by file->getFirstPage() (see I/O layer)
+
+        // read and pin first page of file into buf pool
+        // init curPage, curPageNo, & curDirtyFlag
+        // set curRec to NULLRID
     }
     else
     {
@@ -110,7 +122,7 @@ const int HeapFile::getRecCnt() const
   return headerPage->recCnt;
 }
 
-// retrieve an arbitrary record from a file.
+// retrieve an arbitrary record from a file. 
 // if record is not on the currently pinned page, the current page
 // is unpinned and the required page is read into the buffer pool
 // and pinned.  returns a pointer to the record via the rec parameter
@@ -120,13 +132,20 @@ const Status HeapFile::getRecord(const RID & rid, Record & rec)
     Status status;
 
     // cout<< "getRecord. record (" << rid.pageNo << "." << rid.slotNo << ")" << endl;
-   
-   
-   
-   
-   
-   
-   
+
+    // !! HINT: retrieve arbitraray record given the RID of the record !!
+
+    // curPage & curPageNo are used to keep track of curr data page pinned in buffer pool
+    // check currPage is NULL
+    // if yes, read the page (with the requested record on it) into the buffer
+    // aka bookkeep: set the curPage, curPageNo, curDirtyFlad, & curRec properly
+
+    // if desired record is on the curr pinned page, curPage->getRecord
+
+    // else, unpin curr pinned page
+    // use pageNo field of RID to read page into buf pool
+
+    // return pointer to record via rec
 }
 
 HeapFileScan::HeapFileScan(const string & name,
@@ -215,7 +234,7 @@ const Status HeapFileScan::resetScan()
     return OK;
 }
 
-
+// returns outRid if RID of the next record satisfies the scan predicate
 const Status HeapFileScan::scanNext(RID& outRid)
 {
     Status 	status = OK;
@@ -223,17 +242,25 @@ const Status HeapFileScan::scanNext(RID& outRid)
     RID		tmpRid;
     int 	nextPageNo;
     Record      rec;
+	
+	// scan file one page at a time
+    // for each page
+    // check if curPage is NULL
+    // if yes, read the page (with the requested record on it) into the buffer
+    // aka bookkeep: set the curPage, curPageNo, curDirtyFlad, & curRec properly
 
-    
-	
-	
-	
-	
-	
-	
-	
-	
-	
+    // use Page's firstRecord() & nextRecord(), get all record's RIDs on the page
+
+    // make the RID into a pointer to the record data
+    // use matchRec() to check if the record satisfies the filter
+	// if it matches, store RID in curRec & return curRec
+
+    // !! HINTS: !!
+    // for faster execution: keep curr page pinned until all page records have been processed
+    // HeapFileScan uses all the same methods from HeapFile
+
+	// returns OK if no errors, otherwise return the error code of the first error that occured
+	return OK;
 }
 
 
@@ -357,18 +384,20 @@ const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid)
         return INVALIDRECLEN;
     }
 
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  
+    // check if curPage is NULL
+    // if yes, make last page now the cur page and read into the buffer
+    // call curPage->insertRecord
+    // if successful, bookkeep: update the recCnt, hdrDirtyFlad, curDirtyFlag, etc properly
+
+    // if fails, create a new page
+    //      init properly
+    //      modify header page
+    //      link up new page
+    //      make cur page to be newly allocated page
+    //      try to insert record
+    //      bookkeeping!
+
+    // return the RID of the inserted outRid record
 }
 
 
