@@ -35,17 +35,26 @@ const Status createHeapFile(const string fileName)
         }
 
         // cast Page* to FileHdrPage*
-        // I think this would include newPageNo to hdrPageNo as well
+        hdrPage = (FileHdrPage*)&newPage;
 
         // use hdrPage to initialize values in the header page
+        // ???????
 
         // second allocPage() call -> this will be first data page in file, this will go into the Page*
+        status = bufMgr->allocPage(file, newPageNo, newPage);
+        if (status != OK) {
+            return status;
+        }
 
         // init() page contents using Page*
+        newPage->init(newPageNo);
 
         // store newPageNo in firstPage and lastPage of the FileHdrPage
+        hdrPage->firstPage = newPageNo;
+        hdrPage->lastPage = newPageNo;
 
 		// unpin both pages and mark them as dirty
+        // ????????
     }
     return (FILEEXISTS);
 }
