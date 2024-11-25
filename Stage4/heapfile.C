@@ -1,5 +1,6 @@
 #include "heapfile.h"
 #include "error.h"
+#include <cstring> 
 
 // routine to create a heapfile
 const Status createHeapFile(const string fileName)
@@ -36,9 +37,12 @@ const Status createHeapFile(const string fileName)
 
         // cast Page* to FileHdrPage*
         hdrPage = (FileHdrPage *)&newPage;
-
         // use hdrPage to initialize values in the header page
-        // ???????
+        // copy filename in because char[] is immutable, cast to char*
+        strncpy(hdrPage->fileName, fileName.c_str(), MAXNAMESIZE - 1); 
+        // assuming these should start at 0
+        hdrPage->pageCnt = 0;	  // number of pages
+        hdrPage->recCnt = 0;		// record count
 
         // second allocPage() call -> this will be first data page in file, this will go into the Page*
         status = bufMgr->allocPage(file, newPageNo, newPage);
@@ -50,10 +54,9 @@ const Status createHeapFile(const string fileName)
         newPage->init(newPageNo);
 
         // store newPageNo in firstPage and lastPage of the FileHdrPage
-        // ???
         hdrPage->firstPage = newPageNo;
         hdrPage->lastPage = newPageNo;
-        
+        hdrPage->pageCnt += 1;
 
 		// unpin both pages and mark them as dirty
         status = bufMgr->unPinPage(file, hdrPageNo, true);
