@@ -73,11 +73,17 @@ const Status createHeapFile(const string fileName)
         }
 
         status = db.closeFile(file);
+        if (status != OK) {
+            return status;
+        }
         return status;
     }
 
     // file already exists
     status = db.closeFile(file);
+    if (status != OK) {
+        return status;
+    }
     return FILEEXISTS;
 }
 
@@ -121,8 +127,7 @@ HeapFile::HeapFile(const string &fileName, Status &returnStatus)
         // read and pin first data page
         curPageNo = headerPage->firstPage;
         status = bufMgr->readPage(filePtr, curPageNo, curPage);
-        if (status != OK)
-        {
+        if (status != OK) {
             returnStatus = status;
             return;
         }
