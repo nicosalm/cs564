@@ -1,1 +1,12 @@
-TODO
+G5 Group Members:
+
+Mari Garey mgarey@wisc.edu
+Nico Salm nbsalm@wisc.edu
+Christopher Gottwaldt cgottwaldt@wisc.edu
+
+Contributions:
+- Mari created the initial pseudocode structure and completed base methods.
+- Chris implemented additional methods following Mari's pseudocode.
+- Nico completed remaining methods and fixed issues in existing code.
+
+Everyone collaborated on debugging, particularly with record reading and EOF error issues. The team spent significant time resolving pinning problems in the scanNext function.

@@ -7,53 +7,46 @@
 #
 # Compiler and loader definitions
 #
-PROGRAMS = testfile tester
+PROGRAM = 	testfile
 
-LD = ld
+LD =		ld
 LDFLAGS =	
 
-CXX = g++
-CXXFLAGS = -g -Wall
+CXX =           g++
+CXXFLAGS =	-g -Wall
 
-PURIFY = purify -collector=/usr/ccs/bin/ld -g++
+#PURIFY =        purify -collector=/s/ogcc/bin/ld -g++
+PURIFY =        purify -collector=/usr/ccs/bin/ld -g++
 
 #
 # general definitions
 #
-MAKEFILE = Makefile
+
+MAKEFILE =      Makefile
 
 #
 # list of all object and source files
 #
-OBJS = db.o buf.o bufHash.o error.o page.o heapfile.o
-SRCS = db.C buf.C bufHash.C error.C page.C heapfile.C
 
-# Object files specific to each program
-TESTFILE_OBJS = $(OBJS) testfile.o
-TESTER_OBJS = $(OBJS) tester.o
+OBJS =  db.o buf.o bufHash.o error.o page.o heapfile.o testfile.o 
+SRCS =	db.C buf.C bufHash.C error.C page.C heapfile.C testfile.C 
 
-all: $(PROGRAMS)
+all:		$(PROGRAM)
 
-testfile: $(TESTFILE_OBJS)
-	$(CXX) -o $@ $(TESTFILE_OBJS) $(LDFLAGS)
+$(PROGRAM):	$(OBJS)
+		$(CXX) -o $@ $(OBJS) $(LDFLAGS)
 
-tester: $(TESTER_OBJS)
-	$(CXX) -o $@ $(TESTER_OBJS) $(LDFLAGS)
-
-testfile.pure: $(TESTFILE_OBJS)
-	$(PURIFY) $(CXX) -o $@ $(TESTFILE_OBJS) $(LDFLAGS)
-
-tester.pure: $(TESTER_OBJS)
-	$(PURIFY) $(CXX) -o $@ $(TESTER_OBJS) $(LDFLAGS)
+$(PROGRAM).pure:$(OBJS) 
+		$(PURIFY) $(CXX) -o $@ $(OBJS) $(LDFLAGS)
 
 .C.o:
-	$(CXX) $(CXXFLAGS) -c $<
+		$(CXX) $(CXXFLAGS) -c $<
 
 clean:
-	rm -f core *.bak *~ *.o $(PROGRAMS) *.pure .pure testpage
+		rm -f core *.bak *~ *.o $(PROGRAM) *.pure .pure testpage
 
 depend:
-	makedepend -I /s/gcc/include/g++ -f$(MAKEFILE) \
-	$(SRCS) testfile.C tester.C
+		makedepend -I /s/gcc/include/g++ -f$(MAKEFILE) \
+		$(SRCS)
 
 # DO NOT DELETE THIS LINE -- make depend depends on it.

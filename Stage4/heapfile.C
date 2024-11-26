@@ -1,251 +1,212 @@
-#include "error.h"
 #include "heapfile.h"
-#include <cstring>
+#include "error.h"
 
-// routine to create a heapfile
+// creates a new heap file on disk
 const Status createHeapFile(const string fileName)
 {
-    File *file;
+    File *filePtr;
     Status status;
-    FileHdrPage *hdrPage;
-    int hdrPageNo;
-    int newPageNo;
-    Page *newPage;
+    // first check if file exists
+    status = db.openFile(fileName, filePtr);
 
-    // try to open the file; this should return an error
-    status = db.openFile(fileName, file);
     if (status == OK)
     {
-        // file already exists
-        status = db.closeFile(file);
         return FILEEXISTS;
     }
 
-    // file doesn't exist. First create it and allocate
-    // an empty header page and data page.
+    // if we get here, file doesn't exist so create it
     status = db.createFile(fileName);
     if (status != OK)
-    {
         return status;
-    }
 
-    status = db.openFile(fileName, file);
+    // open the newly created file
+    status = db.openFile(fileName, filePtr);
     if (status != OK)
-    {
         return status;
-    }
 
-    // allocate header page
-    status = bufMgr->allocPage(file, hdrPageNo, newPage);
+    // allocate and setup header page
+    int headerPgNum;
+    Page *headerPg;
+    status = bufMgr->allocPage(filePtr, headerPgNum, headerPg);
     if (status != OK)
-    {
         return status;
-    }
 
-    // cast Page* to FileHdrPage*
-    hdrPage = (FileHdrPage *)newPage;
+    // initialize header page contents
+    FileHdrPage *hdrPg = (FileHdrPage *)headerPg;
+    strncpy(hdrPg->fileName, fileName.c_str(), MAXNAMESIZE - 1);
+    hdrPg->fileName[MAXNAMESIZE - 1] = '\0';
 
-    // initialize header page fields
-    strncpy(hdrPage->fileName, fileName.c_str(), MAXNAMESIZE - 1);
-    hdrPage->pageCnt = 0;
-    hdrPage->recCnt = 0;
-
-    // allocate first data page
-    status = bufMgr->allocPage(file, newPageNo, newPage);
+    // create initial data page
+    int dataPgNum;
+    Page *dataPg;
+    status = bufMgr->allocPage(filePtr, dataPgNum, dataPg);
     if (status != OK)
-    {
         return status;
-    }
 
-    // initialize first data page
-    newPage->init(newPageNo);
+    // initialize data page
+    dataPg->init(dataPgNum);
 
-    // update header page
-    hdrPage->firstPage = newPageNo;
-    hdrPage->lastPage = newPageNo;
-    hdrPage->pageCnt = 1;
+    // update header page pointers
+    hdrPg->firstPage = dataPgNum;
+    hdrPg->lastPage = dataPgNum;
 
-    // unpin both pages and mark them dirty
-    status = bufMgr->unPinPage(file, hdrPageNo, true);
+    // unpin pages and mark -> dirty
+    status = bufMgr->unPinPage(filePtr, headerPgNum, true);
     if (status != OK)
-    {
         return status;
-    }
-    status = bufMgr->unPinPage(file, newPageNo, true);
-    if (status != OK)
-    {
-        return status;
-    }
 
-    status = db.closeFile(file);
-    return status;
+    status = bufMgr->unPinPage(filePtr, dataPgNum, true);
+    if (status != OK)
+        return status;
+
+    // cleanup and close file
+    return db.closeFile(filePtr);
 }
 
-// routine to destroy a heapfile
+// removes heap file from disk
 const Status destroyHeapFile(const string fileName)
 {
     return db.destroyFile(fileName);
 }
 
-// constructor opens the underlying file
-HeapFile::HeapFile(const string &fileName, Status &returnStatus)
+// constructor for heap file object
+HeapFile::HeapFile(const string &fileName, Status &status)
 {
-    Status status;
-    Page *pagePtr;
-
-    cout << "opening file " << fileName << endl;
-
-    // open the file and read in the header page and the first data page
-    if ((status = db.openFile(fileName, filePtr)) == OK)
+    // cout << "attempting to open heap file: " << fileName << endl;
+    status = db.openFile(fileName, filePtr);
+    if (status != OK)
     {
-        // get header page number
-        status = filePtr->getFirstPage(headerPageNo);
-        if (status != OK)
-        {
-            returnStatus = status;
-            return;
-        }
-
-        // read and pin the header page
-        status = bufMgr->readPage(filePtr, headerPageNo, pagePtr);
-        if (status != OK)
-        {
-            returnStatus = status;
-            return;
-        }
-
-        // initialize header page related fields
-        headerPage = (FileHdrPage *)pagePtr;
-        hdrDirtyFlag = false;
-
-        // read and pin first data page
-        curPageNo = headerPage->firstPage;
-        status = bufMgr->readPage(filePtr, curPageNo, curPage);
-        if (status != OK)
-        {
-            returnStatus = status;
-            return;
-        }
-        curDirtyFlag = false;
-
-        // initialize curRec
-        curRec = NULLRID;
-
-        returnStatus = OK;
-    }
-    else
-    {
-        cerr << "open of heap file failed\n";
-        returnStatus = status;
+        cout << "failed to open heap file" << endl;
         return;
     }
+
+    // load header page
+    status = filePtr->getFirstPage(headerPageNo);
+    if (status != OK)
+        return;
+
+    Page *page;
+    status = bufMgr->readPage(filePtr, headerPageNo, page);
+    if (status != OK)
+        return;
+
+    headerPage = (FileHdrPage *)page;
+    hdrDirtyFlag = false;
+
+    // load first data page
+    curPageNo = headerPage->firstPage;
+    status = bufMgr->readPage(filePtr, curPageNo, curPage);
+    if (status != OK)
+        return;
+
+    // initialize tracking variables
+    curDirtyFlag = false;
+    curRec = NULLRID;
 }
 
-// destructor
+// heap file destructor implementation
 HeapFile::~HeapFile()
 {
-    Status status;
-    cout << "invoking heapfile destructor on file " << headerPage->fileName
-         << endl;
-
-    // unpin data page if any
-    if (curPage != NULL)
+    // clean up any pinned pages
+    if (curPage)
     {
-        status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
-        curPage = NULL;
+        // cout << "unpinning current page in destructor" << endl;
+        Status s = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
+        if (s != OK)
+        {
+            cout << "error unpinning data page" << endl;
+        }
+        curPage = nullptr;
         curPageNo = 0;
         curDirtyFlag = false;
-        if (status != OK)
-            cerr << "error in unpin of data page\n";
     }
 
     // unpin header page
-    status = bufMgr->unPinPage(filePtr, headerPageNo, hdrDirtyFlag);
-    if (status != OK)
-        cerr << "error in unpin of header page\n";
-
-    status = db.closeFile(filePtr);
-    if (status != OK)
+    Status s = bufMgr->unPinPage(filePtr, headerPageNo, hdrDirtyFlag);
+    if (s != OK)
     {
-        cerr << "error in closefile call\n";
+        cout << "error unpinning header page" << endl;
+    }
+
+    // close the file
+    s = db.closeFile(filePtr);
+    if (s != OK)
+    {
         Error e;
-        e.print(status);
+        e.print(s);
     }
 }
 
-// return number of records in file
-const int HeapFile::getRecCnt() const { return headerPage->recCnt; }
+// returns total number of records
+const int HeapFile::getRecCnt() const
+{
+    return headerPage->recCnt;
+}
 
-// retrieve an arbitrary record from a file
+// fetches a specific record by rid
 const Status HeapFile::getRecord(const RID &rid, Record &rec)
 {
-    Status status;
-
-    // check if requested page is current
-    if (curPage == NULL || curPageNo != rid.pageNo)
+    // check if we need to load a different page
+    if (curPage == nullptr || rid.pageNo != curPageNo)
     {
-        if (curPage != NULL)
+        // unpin current if it exists
+        if (curPage)
         {
-            // unpin current page
-            status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
-            if (status != OK)
-            {
-                return status;
-            }
+            Status s = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
+            if (s != OK)
+                return s;
         }
 
-        // read requested page
+        // load requested page
         curPageNo = rid.pageNo;
-        status = bufMgr->readPage(filePtr, curPageNo, curPage);
-        if (status != OK)
-        {
-            return status;
-        }
-
-        // update tracking
+        Status s = bufMgr->readPage(filePtr, curPageNo, curPage);
+        if (s != OK)
+            return s;
         curDirtyFlag = false;
-        //curRec = NULLRID;
     }
 
-    // get record from page
-    status = curPage->getRecord(rid, rec);
-    if (status != OK)
+    // fetch the record
+    Status s = curPage->getRecord(rid, rec);
+    if (s == OK)
     {
-        return status;
+        curRec = rid;
     }
-
-    // update current record
-    curRec = rid;
-
-    return OK;
+    return s;
 }
 
+// scan implementation
 HeapFileScan::HeapFileScan(const string &name, Status &status)
     : HeapFile(name, status)
 {
-    filter = NULL;
+    filter = nullptr;
 }
 
-const Status HeapFileScan::startScan(const int offset_, const int length_,
-                                     const Datatype type_, const char *filter_,
+const Status HeapFileScan::startScan(const int offset_,
+                                     const int length_,
+                                     const Datatype type_,
+                                     const char *filter_,
                                      const Operator op_)
 {
+    // handle case with no filter
     if (!filter_)
     {
-        filter = NULL;
+        filter = nullptr;
         return OK;
     }
 
-    if ((offset_ < 0 || length_ < 1) ||
-        (type_ != STRING && type_ != INTEGER && type_ != FLOAT) ||
-        (type_ == INTEGER && length_ != sizeof(int) ||
-         type_ == FLOAT && length_ != sizeof(float)) ||
-        (op_ != LT && op_ != LTE && op_ != EQ && op_ != GTE && op_ != GT &&
-         op_ != NE))
-    {
+    // ye olde conditional block -- validates scan parameters
+    if (offset_ < 0 || length_ < 1)
         return BADSCANPARM;
-    }
+    if (type_ != STRING && type_ != INTEGER && type_ != FLOAT)
+        return BADSCANPARM;
+    if ((type_ == INTEGER && length_ != sizeof(int)) ||
+        (type_ == FLOAT && length_ != sizeof(float)))
+        return BADSCANPARM;
+    if (op_ != LT && op_ != LTE && op_ != EQ &&
+        op_ != GTE && op_ != GT && op_ != NE)
+        return BADSCANPARM;
 
+    // store scan parameters
     offset = offset_;
     length = length_;
     type = type_;
@@ -255,95 +216,77 @@ const Status HeapFileScan::startScan(const int offset_, const int length_,
     return OK;
 }
 
-const bool HeapFileScan::matchRec(const Record &rec) const
+// ends the current scan
+const Status HeapFileScan::endScan()
 {
-    // no filtering requested
-    if (!filter)
-        return true;
+    if (!curPage)
+        return OK;
 
-    // see if offset + length is beyond end of record
-    // maybe this should be an error???
-    if ((offset + length - 1) >= rec.length)
-        return false;
-
-    float diff = 0; // < 0 if attr < fltr
-    switch (type)
-    {
-
-    case INTEGER:
-        int iattr, ifltr; // word-alignment problem possible
-        memcpy(&iattr, (char *)rec.data + offset, length);
-        memcpy(&ifltr, filter, length);
-        diff = iattr - ifltr;
-        break;
-
-    case FLOAT:
-        float fattr, ffltr; // word-alignment problem possible
-        memcpy(&fattr, (char *)rec.data + offset, length);
-        memcpy(&ffltr, filter, length);
-        diff = fattr - ffltr;
-        break;
-
-    case STRING:
-        diff = strncmp((char *)rec.data + offset, filter, length);
-        break;
-    }
-
-    switch (op)
-    {
-    case LT:
-        if (diff < 0.0)
-            return true;
-        break;
-    case LTE:
-        if (diff <= 0.0)
-            return true;
-        break;
-    case EQ:
-        if (diff == 0.0)
-            return true;
-        break;
-    case GTE:
-        if (diff >= 0.0)
-            return true;
-        break;
-    case GT:
-        if (diff > 0.0)
-            return true;
-        break;
-    case NE:
-        if (diff != 0.0)
-            return true;
-        break;
-    }
-
-    return false;
+    Status s = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag); // unpin current page (last page)
+    curPage = nullptr;
+    curPageNo = 0;
+    curDirtyFlag = false;
+    return s;
 }
 
+HeapFileScan::~HeapFileScan()
+{
+    endScan();
+}
+
+// saves current scan position for later retrieval
+const Status HeapFileScan::markScan()
+{
+    markedPageNo = curPageNo;
+    markedRec = curRec;
+    return OK;
+}
+
+// restores saved scan position
+const Status HeapFileScan::resetScan()
+{
+    if (markedPageNo == curPageNo)
+    {
+        curRec = markedRec; // because we are on the same page
+        return OK;
+    }
+
+    // need to load different page for reset
+    if (curPage)
+    {
+        // unpin current page
+        Status s = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
+        if (s != OK)
+            return s;
+    }
+
+    curPageNo = markedPageNo;
+    Status s = bufMgr->readPage(filePtr, curPageNo, curPage);
+    if (s != OK)
+        return s;
+
+    curRec = markedRec; // reset to last marked record
+    curDirtyFlag = false;
+    return OK;
+}
+
+// advances to next matching record
 const Status HeapFileScan::scanNext(RID &outRid)
 {
+    // cout << "scanning for next matching record" << endl;
     Status status;
     RID nextRid;
-    RID tmpRid;
-    Record rec;
-    int nextPageNo;
-
-    // check if scan is finished
-    if (curPage == NULL && headerPage->firstPage == -1)
-    {
-        return FILEEOF;
-    }
 
     while (true)
     {
-        if (curPage == NULL)
+        // handle case with no current page
+        if (!curPage)
         {
-            // initialize first page if not already done
-            curPageNo = headerPage->firstPage;
-            status = bufMgr->readPage(filePtr, curPageNo, curPage);
-            if (status != OK) {
+            status = bufMgr->readPage(filePtr, headerPage->firstPage, curPage);
+            if (status != OK)
                 return status;
-            }
+            curPageNo = headerPage->firstPage;
+            curDirtyFlag = false;
 
             status = curPage->firstRecord(nextRid);
         }
@@ -352,23 +295,22 @@ const Status HeapFileScan::scanNext(RID &outRid)
             status = curPage->nextRecord(curRec, nextRid);
         }
 
-        // update RID
-        curRec = nextRid;
+        // handle end of page
+        if (status == ENDOFPAGE)
+        {
+            int nextPg;
+            status = curPage->getNextPage(nextPg);
 
-        if (status == ENDOFPAGE) {
-            status = curPage->getNextPage(nextPageNo);
-            if (status != OK || nextPageNo == -1)
-            {
+            // check for end of file condition
+            if (status != OK || nextPg == -1)
                 return FILEEOF;
-            }
 
+            // move to next page
             status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
             if (status != OK)
-            {
                 return status;
-            }
 
-            curPageNo = nextPageNo;
+            curPageNo = nextPg;
             status = bufMgr->readPage(filePtr, curPageNo, curPage);
             if (status != OK)
                 return status;
@@ -376,189 +318,189 @@ const Status HeapFileScan::scanNext(RID &outRid)
             curDirtyFlag = false;
             status = curPage->firstRecord(nextRid);
             if (status != OK)
-            {
-                curRec = nextRid;
                 continue;
-            }
-            curRec = nextRid;
         }
-        getRecord(rec);
-        if (matchRec(rec))
+
+        // check if record matches criteria
+        curRec = nextRid;
+        Record rec; // SO --> we need to get the record to check if it matches the criteria
+        status = getRecord(rec);
+        if (status != OK)
+            return status;
+
+        if (matchRec(rec)) // if it matches, return the rid
         {
-            outRid = nextRid;
+            outRid = curRec;
             return OK;
         }
     }
 }
 
-const Status HeapFileScan::endScan()
-{
-    Status status;
-    if (curPage != NULL)
-    {
-        status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
-        curPage = NULL;
-        curPageNo = 0;
-        curDirtyFlag = false;
-        return status;
-    }
-    return OK;
-}
-
-HeapFileScan::~HeapFileScan() { endScan(); }
-
-const Status HeapFileScan::markScan()
-{
-    markedPageNo = curPageNo;
-    markedRec = curRec;
-    return OK;
-}
-
-const Status HeapFileScan::resetScan()
-{
-    Status status;
-    if (markedPageNo != curPageNo)
-    {
-        if (curPage != NULL)
-        {
-            status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
-            if (status != OK)
-                return status;
-        }
-        curPageNo = markedPageNo;
-        curRec = markedRec;
-        status = bufMgr->readPage(filePtr, curPageNo, curPage);
-        if (status != OK)
-            return status;
-        curDirtyFlag = false;
-    }
-    else
-        curRec = markedRec;
-    return OK;
-}
-
+// retrieves current record
 const Status HeapFileScan::getRecord(Record &rec)
 {
     return curPage->getRecord(curRec, rec);
 }
 
+// removes current record
 const Status HeapFileScan::deleteRecord()
 {
-    Status status;
-    status = curPage->deleteRecord(curRec);
-    if (status != OK)
-        return status;
-
-    curDirtyFlag = true;
-    headerPage->recCnt--;
-    hdrDirtyFlag = true;
-    return OK;
+    Status s = curPage->deleteRecord(curRec);
+    if (s == OK)
+    {
+        headerPage->recCnt--;
+        curDirtyFlag = true;
+        hdrDirtyFlag = true;
+    }
+    return s;
 }
 
+// marks current page as modified
 const Status HeapFileScan::markDirty()
 {
     curDirtyFlag = true;
     return OK;
 }
 
+// checks if record matches scan criteria
+const bool HeapFileScan::matchRec(const Record &rec) const
+{
+    if (!filter)
+        return true;
+    if (offset + length - 1 >= rec.length)
+        return false;
+
+    float diffr = 0;
+
+    switch (type)
+    {
+    case INTEGER:
+    {
+        int recordVal, filterVal;
+        memcpy(&recordVal, (char *)rec.data + offset, length);
+        memcpy(&filterVal, filter, length);
+        diffr = recordVal - filterVal;
+        break;
+    }
+    case FLOAT:
+    {
+        float recordVal, filterVal;
+        memcpy(&recordVal, (char *)rec.data + offset, length);
+        memcpy(&filterVal, filter, length);
+        diffr = recordVal - filterVal;
+        break;
+    }
+    case STRING:
+        diffr = strncmp((char *)rec.data + offset, filter, length);
+        break;
+    }
+
+    switch (op)
+    {
+    case LT:
+        return diffr < 0;
+    case LTE:
+        return diffr <= 0;
+    case EQ:
+        return diffr == 0;
+    case GTE:
+        return diffr >= 0;
+    case GT:
+        return diffr > 0;
+    case NE:
+        return diffr != 0;
+    default:
+        return false;
+    }
+}
+
 InsertFileScan::InsertFileScan(const string &name, Status &status)
     : HeapFile(name, status)
 {
-    // heapfile constructor already read in header page and first data page -- no
-    // need to do it again
 }
 
 InsertFileScan::~InsertFileScan()
 {
-    Status status;
-    if (curPage != NULL)
+    if (curPage)
     {
-        status = bufMgr->unPinPage(filePtr, curPageNo, true);
-        curPage = NULL;
+        // cout << "cleaning up insert scan" << endl;
+        Status s = bufMgr->unPinPage(filePtr, curPageNo, true);
+        if (s != OK)
+        {
+            cout << "error unpinning page during cleanup" << endl;
+        }
+        curPage = nullptr;
         curPageNo = 0;
-        if (status != OK)
-            cerr << "error in unpin of data page\n";
     }
 }
 
+// adds new record to file
 const Status InsertFileScan::insertRecord(const Record &rec, RID &outRid)
 {
-    Page *newPage;
-    int newPageNo;
-    Status status;
-    RID rid;
-
-    // check if record is too large for a page
-    // (record length must be less than PAGESIZE - DPFIXED)
+    // verify record size
     if ((unsigned int)rec.length > PAGESIZE - DPFIXED)
     {
         return INVALIDRECLEN;
     }
 
-    // If no current page, we need to get the last page
-    if (curPage == NULL)
+    Status status;
+
+    // load last page if no current page
+    if (!curPage)
     {
         curPageNo = headerPage->lastPage;
-        curDirtyFlag = false;
         status = bufMgr->readPage(filePtr, curPageNo, curPage);
         if (status != OK)
-        {
             return status;
-        }
+        curDirtyFlag = false;
     }
 
-    // try to insert record into current page
+    // attempt insertion (may fail if page is full)
     status = curPage->insertRecord(rec, outRid);
+
+    // SO --> handle full page case; we need to create a new page
     if (status == NOSPACE)
     {
-        // current page is full, need to allocate a new page
-
-        // first unpin current page
+        // unpin current page
         status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
         if (status != OK)
-        {
             return status;
-        }
+
+        // create new page
+        Page *newPg;
+        int newPgNum;
+        status = bufMgr->allocPage(filePtr, newPgNum, newPg);
+        if (status != OK)
+            return status;
+
+        // initialize new page
+        newPg->init(newPgNum);
+
+        // link pages
+        status = curPage->setNextPage(newPgNum);
+        if (status != OK)
+            return status;
+
+        // update header info
+        headerPage->lastPage = newPgNum;
+        headerPage->pageCnt++;
+        hdrDirtyFlag = true;
+
+        // update current page
+        curPage = newPg;
+        curPageNo = newPgNum;
         curDirtyFlag = false;
 
-        // allocate new page
-        status = bufMgr->allocPage(filePtr, newPageNo, newPage);
+        // retry insertion now that we have a new page
+        status = curPage->insertRecord(rec, outRid);
         if (status != OK)
-        {
             return status;
-        }
-
-        // and initialize it
-        newPage->init(newPageNo);
-
-        // link new page to end of file
-        status = curPage->setNextPage(newPageNo);
-        if (status != OK)
-        {
-            return status;
-        }
-
-        // update header page
-        headerPage->pageCnt++;
-        headerPage->lastPage = newPageNo;
-
-        // update current page to new page
-        curPage = newPage;
-        curPageNo = newPageNo;
-
-        // & try insert again on new page
-        status = curPage->insertRecord(rec, rid);
-        if (status != OK)
-        {
-            return status;
-        }
     }
 
-    // update record count
+    // update counts and flags
     headerPage->recCnt++;
+    hdrDirtyFlag = true;
     curDirtyFlag = true;
-
-    outRid = rid;
 
     return OK;
 }
