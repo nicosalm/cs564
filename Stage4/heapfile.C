@@ -505,6 +505,7 @@ const Status InsertFileScan::insertRecord(const Record &rec, RID &outRid)
     Page *newPage;
     int newPageNo;
     Status status;
+    RID rid;
 
     // check if record is too large for a page
     // (record length must be less than PAGESIZE - DPFIXED)
@@ -527,7 +528,7 @@ const Status InsertFileScan::insertRecord(const Record &rec, RID &outRid)
 
     // try to insert record into current page
     status = curPage->insertRecord(rec, outRid);
-    if (status != OK)
+    if (status == NOSPACE)
     {
         // current page is full, need to allocate a new page
 
@@ -537,6 +538,7 @@ const Status InsertFileScan::insertRecord(const Record &rec, RID &outRid)
         {
             return status;
         }
+        curDirtyFlag = false;
 
         // allocate new page
         status = bufMgr->allocPage(filePtr, newPageNo, newPage);
@@ -558,15 +560,13 @@ const Status InsertFileScan::insertRecord(const Record &rec, RID &outRid)
         // update header page
         headerPage->pageCnt++;
         headerPage->lastPage = newPageNo;
-        hdrDirtyFlag = true;
 
         // update current page to new page
         curPage = newPage;
         curPageNo = newPageNo;
-        curDirtyFlag = true;
 
         // & try insert again on new page
-        status = curPage->insertRecord(rec, outRid);
+        status = curPage->insertRecord(rec, rid);
         if (status != OK)
         {
             return status;
@@ -575,8 +575,9 @@ const Status InsertFileScan::insertRecord(const Record &rec, RID &outRid)
 
     // update record count
     headerPage->recCnt++;
-    hdrDirtyFlag = true;
     curDirtyFlag = true;
+
+    outRid = rid;
 
     return OK;
 }
