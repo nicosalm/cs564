@@ -326,18 +326,18 @@ const Status HeapFileScan::scanNext(RID &outRid)
     RID nextRid;
     Record rec;
 
+    // check if scan is finished
+    if (curPage == NULL && headerPage->firstPage == -1)
+    {
+        return FILEEOF;
+    }
+
     while (true)
     {
-        // If we need to start with a new page
         if (curPage == NULL)
         {
-            // Get the first page of the file
-            if (headerPage->firstPage == -1)
-            {
-                return FILEEOF;
-            }
+            // initialize first page if not already done
             curPageNo = headerPage->firstPage;
-
             status = bufMgr->readPage(filePtr, curPageNo, curPage);
             if (status != OK)
                 return status;
@@ -345,34 +345,32 @@ const Status HeapFileScan::scanNext(RID &outRid)
             curDirtyFlag = false;
             curRec = NULLRID;
 
-            // Get first record on this page
             status = curPage->firstRecord(nextRid);
-            if (status != OK)
-            {
-                if (status == NORECORDS)
-                {
-                    status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
-                    curPage = NULL;
-                    if (status != OK)
-                        return status;
-                    continue; // Try next page
-                }
+            if (status != OK && status != NORECORDS)
                 return status;
+            if (status == NORECORDS)
+            {
+                status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
+                if (status != OK)
+                    return status;
+                curPage = NULL;
+                return FILEEOF;
             }
         }
         else
         {
-            // Get next record on current page
             status = curPage->nextRecord(curRec, nextRid);
-            if (status == ENDOFPAGE)
+            if (status != OK)
             {
-                // Need to move to next page
+                if (status != ENDOFPAGE)
+                    return status;
+
+                // end of page - move to next
                 int nextPageNo;
                 status = curPage->getNextPage(nextPageNo);
                 if (status != OK)
                     return status;
 
-                // Unpin current page
                 status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
                 if (status != OK)
                     return status;
@@ -383,7 +381,6 @@ const Status HeapFileScan::scanNext(RID &outRid)
                     return FILEEOF;
                 }
 
-                // Read next page
                 curPageNo = nextPageNo;
                 status = bufMgr->readPage(filePtr, curPageNo, curPage);
                 if (status != OK)
@@ -391,22 +388,13 @@ const Status HeapFileScan::scanNext(RID &outRid)
 
                 curDirtyFlag = false;
                 status = curPage->firstRecord(nextRid);
-                if (status != OK)
-                {
-                    if (status == NORECORDS)
-                    {
-                        continue; // Try next page
-                    }
+                if (status != OK && status != NORECORDS)
                     return status;
-                }
-            }
-            else if (status != OK)
-            {
-                return status;
+                if (status == NORECORDS)
+                    continue;
             }
         }
 
-        // Get and check the record
         status = curPage->getRecord(nextRid, rec);
         if (status != OK)
             return status;
@@ -417,6 +405,7 @@ const Status HeapFileScan::scanNext(RID &outRid)
             curRec = nextRid;
             return OK;
         }
+
         curRec = nextRid;
     }
 }
