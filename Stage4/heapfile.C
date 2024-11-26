@@ -23,8 +23,6 @@ const Status createHeapFile(const string fileName)
             return status;
         }
 
-    status = db.closeFile(file);
-
         // open newly created file
 		status = db.openFile(fileName, file);
         if (status != OK) {
@@ -39,9 +37,11 @@ const Status createHeapFile(const string fileName)
 
         // cast Page* to FileHdrPage*
         hdrPage = (FileHdrPage *)&newPage;
+
         // use hdrPage to initialize values in the header page
         // copy filename in because char[] is immutable, cast to char*
-        strncpy(hdrPage->fileName, fileName.c_str(), MAXNAMESIZE - 1); 
+        strncpy(hdrPage->fileName, fileName.c_str(), MAXNAMESIZE - 1);
+
         // assuming these should start at 0
         hdrPage->pageCnt = 0;	  // number of pages
         hdrPage->recCnt = 0;		// record count
@@ -58,19 +58,23 @@ const Status createHeapFile(const string fileName)
         // store newPageNo in firstPage and lastPage of the FileHdrPage
         hdrPage->firstPage = newPageNo;
         hdrPage->lastPage = newPageNo;
-        hdrPage->pageCnt += 1;
 
 		// unpin both pages and mark them as dirty
         status = bufMgr->unPinPage(file, hdrPageNo, true);
         if (status != OK) {
             return status;
         }
+
         status = bufMgr->unPinPage(file, newPageNo, true);
         if (status != OK) {
             return status;
         }
+
+        status = db.closeFile(file);
+        if (status != OK) {
+            return status;
+        }
     }
-    status = db.closeFile(file);
     return (FILEEXISTS);
 }
 
@@ -122,6 +126,9 @@ HeapFile::HeapFile(const string & fileName, Status& returnStatus)
     
         // set curRec to NULLRID
         curRec = NULLRID;
+
+        returnStatus = OK;
+        return;
     }
     else
     {
@@ -186,21 +193,20 @@ const Status HeapFile::getRecord(const RID & rid, Record & rec)
     // curPage & curPageNo are used to keep track of curr data page pinned in buffer pool
     // if the current page is not null or isn't the requested one
     if (curPage == NULL || curPageNo != rid.pageNo) {
-      if (curPage != NULL) {
-        // unpin the currently pinned page
-        status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
-        if (status != OK) {
-          return status;
+        if (curPage != NULL) {
+            // unpin the currently pinned page
+            status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
+            if (status != OK) {
+                return status;
+            }
         }
-      }
          // if yes, read the page (with the requested record on it) into the buffer
          // aka bookkeep: set the curPage, curPageNo, curDirtyFlad, & curRec properly
 
 
         // read page containing  desired record into buffer pool
         status = bufMgr->readPage(filePtr, rid.pageNo, curPage);
-        if (status != OK)
-        {
+        if (status != OK) {
             return status;
         }
 
@@ -212,37 +218,14 @@ const Status HeapFile::getRecord(const RID & rid, Record & rec)
 
     // get record from currently pinned page
     status = curPage->getRecord(rid, rec);
-    if (status != OK)
-    {
+    if (status != OK) {
         return status;
     }
 
     // put the rid as curRec so we know which one we have
     curRec = rid;
-
     return OK;
-  }
-  
-  //     // if desired record is on the curr pinned page, curPage->getRecord
-  //     status = curPage->getRecord(rid, rec);
-  //     if (status != OK) {
-  //         // else, unpin curr pinned page
-  //         // use pageNo field of RID to read page into buf pool
-  //         status = bufMgr->unPinPage(filePtr, curPageNo, true);
-  //         if (status != OK) {
-  //             return status;
-  //         }
-  //         status = bufMgr->readPage(filePtr, rid.pageNo, curPage);
-  //         if (status != OK) {
-  //             return status;
-  //         }
-  //     }
-
-  //     // return pointer to record via rec
-  //     curRec = rid;
-
-  //     return OK;
-  // }
+}
 
 HeapFileScan::HeapFileScan(const string & name,
 			   Status & status) : HeapFile(name, status)
@@ -484,7 +467,8 @@ const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid)
     if (curPage == NULL) {
         // if yes, make last page now the cur page and read into the buffer
         curPageNo = headerPage->lastPage;
-        status = bufMgr->allocPage(filePtr, curPageNo, curPage);
+        curDirtyFlag = false;
+        status = bufMgr->readPage(filePtr, curPageNo, curPage);
         if (status != OK) {
             return status;
         }
@@ -493,22 +477,56 @@ const Status InsertFileScan::insertRecord(const Record & rec, RID& outRid)
     // call curPage->insertRecord
     status = curPage->insertRecord(rec, outRid);
     if (status != OK) {
-        newPageNo = outRid.pageNo;
+        // if fails
+
+        // unpin cur page
+        status = bufMgr->unPinPage(filePtr, curPageNo, curDirtyFlag);
+        if (status != OK) {
+            return status;
+        }
+        
+        // create new page
+        curDirtyFlag = false;
         status = bufMgr->allocPage(filePtr, newPageNo, newPage);
-        // if fails, create a new page
-        //      init properly
-        //      modify header page
-        //      link up new page
-        //      make cur page to be newly allocated page
-        //      try to insert record
-        //      bookkeeping!
+        if (status != OK) {
+            return status;
+        }
+
+        // init properly
+        newPage->init(newPageNo);
+        
+        // modify header page
+        headerPage->lastPage = newPageNo;
+        headerPage->pageCnt++;
+
+        // link up new page
+        status = curPage->setNextPage(newPageNo);
+
+        // make cur page to be newly allocated page
+        curPage = newPage;
+        curPageNo = newPageNo;
+
+        // try to insert record
+        status = curPage->insertRecord(rec, rid);
+        if (status != OK) {
+            return status;
+        }
+
+        // bookkeeping!
+        headerPage->recCnt++;
+        curDirtyFlag = true;
+        hdrDirtyFlag = true;
     }
     else {
-        // if successful, bookkeep: update the recCnt, hdrDirtyFlad, curDirtyFlag, etc properly
+        // if successful, bookkeep: update the recCnt, hdrDirtyFlag, curDirtyFlag, etc properly
+        headerPage->recCnt++;
+        curDirtyFlag = true;
+        hdrDirtyFlag = true;
     }
 
     // return the RID of the inserted outRid record
-    
+    outRid = rid;
+    return OK;
 }
 
 
