@@ -320,6 +320,7 @@ const bool HeapFileScan::matchRec(const Record &rec) const
     return false;
 }
 
+// returns outRid if RID of the next record satisfies the scan predicate
 const Status HeapFileScan::scanNext(RID &outRid)
 {
     Status status;
