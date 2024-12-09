@@ -1,0 +1,3 @@
+Mari Garey (mgarey@wisc.edu) -> allocBuf & comments
+Nico Salm (nbsalm@wisc.edu) -> readPage & debugging
+Christopher Gottwaldt (cgottwaldt@wisc.edu) -> unPinPage & allocPage
