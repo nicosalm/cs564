@@ -36,7 +36,16 @@ const Status QU_Select(const string & result,
 	You can use the atoi() function to convert a char* to an integer and atof() to convert it to a float.
 	If attr is NULL, an unconditional scan of the input table should be performed.*/
 
+	Status status;
 	
+	AttrDesc attrDesc;
+
+	status = attrCat->getInfo(attr->relName, attr->attrName, attrDesc);
+	if (status != OK)
+    {
+        return status;
+    }
+
    // Qu_Select sets up things and then calls ScanSelect to do the actual work
     cout << "Doing QU_Select " << endl;
 
@@ -53,6 +62,11 @@ const Status ScanSelect(const string & result,
 			const char *filter,
 			const int reclen)
 {
+	// startScan()
+
+	// scanNext()
+
+	// endScan()
     cout << "Doing HeapFileScan Selection using ScanSelect()" << endl;
 
 

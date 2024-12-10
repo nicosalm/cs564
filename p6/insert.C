@@ -23,6 +23,10 @@ const Status QU_Insert(const string & relation,
  * If no value is specified for an attribute, you should reject the insertion 
  * as Minirel does not implement NULLs. */
 
+// check if input is null
+
+// type matters
+
 return OK;
 
 }

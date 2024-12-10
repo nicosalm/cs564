@@ -9,6 +9,9 @@
         "insert.C": "cpp",
         "help.C": "cpp",
         "select.C": "cpp",
-        "delete.C": "cpp"
+        "delete.C": "cpp",
+        "joinHT.C": "cpp",
+        "minirel.C": "cpp",
+        "catalog.C": "cpp"
     }
 }
