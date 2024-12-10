@@ -4,6 +4,11 @@
         "page.C": "cpp",
         "bufHash.C": "cpp",
         "buf.C": "cpp",
-        "db.C": "cpp"
+        "db.C": "cpp",
+        "join.C": "cpp",
+        "insert.C": "cpp",
+        "help.C": "cpp",
+        "select.C": "cpp",
+        "delete.C": "cpp"
     }
 }
