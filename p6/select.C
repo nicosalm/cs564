@@ -45,19 +45,27 @@ const Status QU_Select(const string & result,
 		switch (attr->attrType)
 		{
 			case STRING:
+			{
 				filter = (char*)attrValue;
 				break;
-
+			}
 			case INTEGER:
+			{
 				filter = (char*)malloc(sizeof(int));
 				*(int*)filter = atoi(attrValue);
 				break;
-
+			}
 			case FLOAT:
+			{
 				filter = (char*)malloc(sizeof(float));
 				*(float*)filter = atof(attrValue);
 				break;
+			}
 		}
+	}
+	else
+	{
+		filter = NULL;
 	}
 	
 	Status status;
