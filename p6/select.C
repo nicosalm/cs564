@@ -36,18 +36,70 @@ const Status QU_Select(const string & result,
 	You can use the atoi() function to convert a char* to an integer and atof() to convert it to a float.
 	If attr is NULL, an unconditional scan of the input table should be performed.*/
 
-	Status status;
-	
-	AttrDesc attrDesc;
-
-	status = attrCat->getInfo(attr->relName, attr->attrName, attrDesc);
-	if (status != OK)
-    {
-        return status;
-    }
-
-   // Qu_Select sets up things and then calls ScanSelect to do the actual work
+	// Qu_Select sets up things and then calls ScanSelect to do the actual work
     cout << "Doing QU_Select " << endl;
+	
+	char* filter;
+	if (attrValue) 
+	{
+		switch (attr->attrType)
+		{
+			case STRING:
+				filter = (char*)attrValue;
+				break;
+
+			case INTEGER:
+				filter = (char*)malloc(sizeof(int));
+				*(int*)filter = atoi(attrValue);
+				break;
+
+			case FLOAT:
+				filter = (char*)malloc(sizeof(float));
+				*(float*)filter = atof(attrValue);
+				break;
+		}
+	}
+	
+	Status status;
+	AttrDesc attrDescArray[projCnt];
+
+	for (int i = 0; i < projCnt; i++)
+	{
+		status = attrCat->getInfo(projNames[i].relName,
+									projNames[i].attrName,
+									attrDescArray[i]);
+
+		if (status != OK)
+		{
+			return status;
+		}
+	}
+
+	AttrDesc attrDesc;
+	AttrDesc* attrDescPtr = NULL;
+
+	if (attr)
+	{
+		status = attrCat->getInfo(attr->relName,
+									attr->attrName,
+									attrDesc);
+
+		if (status != OK)
+		{
+			return status;
+		}
+
+		attrDescPtr = &attrDesc;
+	}
+
+	int reclen = 0;
+	for (int i = 0; i < projCnt; i++)
+	{
+		reclen += attrDescArray[i].attrLen;
+	}
+
+	status = ScanSelect(result, projCnt, attrDescArray, attrDescPtr, op, filter, reclen);
+	return status;
 
 }
 
