@@ -60,7 +60,7 @@ const Status QU_Insert(
 
   // # we need to look through all of the attrs and find matches so that
   // the attrs are in the correct order (sometimes they arent!)
-
+  // https://cplusplus.com/forum/general/211593/ (for finding matches between 2 arrays)
   bool matchFound = false;
   for (int i = 0; i < attrCnt; i++) {    
     for (int j = 0; j < relAttrCnt; j++) {
