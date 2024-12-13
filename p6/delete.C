@@ -22,6 +22,8 @@ const Status QU_Delete(const string & relation,
  * by attrName, op, and the constant attrValue. type denotes the type of the attribute. 
  * You can locate all the qualifying tuples using a filtered HeapFileScan. */
 
+cout << "Doing QU_Delete " << endl;
+
 Status status;
 AttrDesc attrDesc;
 
