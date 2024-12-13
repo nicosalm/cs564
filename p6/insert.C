@@ -24,6 +24,8 @@ const Status QU_Insert(
  * If no value is specified for an attribute, you should reject the insertion 
  * as Minirel does not implement NULLs. */
 
+  cout << "Doing QU_Insert " << endl;
+
   Status status;
   RID outRID;
   
