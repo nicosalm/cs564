@@ -53,8 +53,10 @@ starid real_name            plays        soapid
 Number of records: 29
 
 >>> delete stars where stars.plays = "Lisa";
+Doing QU_Delete 
 
 >>> delete stars where stars.real_name = "Anthony, Eugene";
+Doing QU_Delete 
 
 >>> print stars;
 Relation name: stars
@@ -92,6 +94,7 @@ starid real_name            plays        soapid
 Number of records: 27
 
 >>> delete stars where stars.soapid = 1;
+Doing QU_Delete 
 
 >>> print stars;
 Relation name: stars
@@ -126,6 +129,7 @@ starid real_name            plays        soapid
 Number of records: 24
 
 >>> delete stars;
+Doing QU_Delete 
 
 >>> print stars;
 Relation name: stars
@@ -136,6 +140,7 @@ starid real_name            plays        soapid
 Number of records: 0
 
 >>> delete soaps where soaps.network < "NBC";
+Doing QU_Delete 
 
 >>> print soaps;
 Relation name: soaps
