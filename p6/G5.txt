@@ -1,0 +1,14 @@
+G5 Group Members:
+Mari Garey mgarey@wisc.edu
+Christopher Gottwaldt cgottwaldt@wisc.edu
+Nico Salm nbsalm@wisc.edu
+
+Contributions: 
+- Mari completed the delete.C file, and did part of the select.C file.
+- Chris completed the insert.C file.
+- Nico completed the select.C file.
+
+At the end, we all helped with testing and debugging, making sure our output matched the canvas files. Nico was the primary leader of this part. 
+We had some difficulty with testing our code because comparing the output was a tedious process. 
+
+We also helped each other with finishing the methods and pointed out resources to each other on Canvas. 
